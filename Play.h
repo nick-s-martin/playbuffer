@@ -94,26 +94,28 @@ constexpr float PLAY_PI	= 3.14159265358979323846f;   // pi
 // Description:	Declaration for a simple memory tracker to prevent leaks
 //********************************************************************************************************************************
 
-// Prints out all the currently allocated memory to the debug output
-void PrintAllocations( const char* tagText );
+#ifdef _DEBUG
+	// Prints out all the currently allocated memory to the debug output
+	void PrintAllocations( const char* tagText );
 
-// Allocate some memory with a known origin
-void* operator new(size_t size, const char* file, int line);
-// Allocate some memory with a known origin
-void* operator new[](size_t size, const char* file, int line); 
-// Allocate some memory without a known origin
-void* operator new[](size_t size);
+	// Allocate some memory with a known origin
+	void* operator new(size_t size, const char* file, int line);
+	// Allocate some memory with a known origin
+	void* operator new[](size_t size, const char* file, int line); 
+	// Allocate some memory without a known origin
+	void* operator new[](size_t size);
 
-// Free some memory 
-void operator delete[](void* p);
-// Free some memory (matching allocator for exceptions )
-void operator delete(void* p, const char* file, int line);
-// Free some memory (matching allocator for exceptions )
-void operator delete[](void* p, const char* file, int line); 
+	// Free some memory 
+	void operator delete[](void* p);
+	// Free some memory (matching allocator for exceptions )
+	void operator delete(void* p, const char* file, int line);
+	// Free some memory (matching allocator for exceptions )
+	void operator delete[](void* p, const char* file, int line); 
 
-//#ifdef PLAY_IMPLEMENTATION
-#define new new( __FILE__ , __LINE__ )
-//#endif
+	#define new new( __FILE__ , __LINE__ )
+#else
+	#define PrintAllocations( x )
+#endif
 
 #endif
 #ifndef PLAY_PLAYMATHS_H
@@ -1219,12 +1221,16 @@ namespace Play
 //********************************************************************************************************************************
 
 
+#ifdef _DEBUG
+
 // Undefine 'new' in this compilation unit only.
-// #TODO : Review the use of the 'new' macro it could be asking for trouble.
+#pragma push_macro("new")
 #undef new
 
 constexpr int MAX_ALLOCATIONS = 8192 * 4;
 constexpr int MAX_FILENAME = 1024;
+
+unsigned int g_allocId = 0;
 
 // A structure to store data on each memory allocation
 struct ALLOC
@@ -1233,8 +1239,9 @@ struct ALLOC
 	char file[MAX_FILENAME] = { 0 };
 	int line = 0;
 	size_t size = 0;
+	int id = 0;
 
-	ALLOC( void* a, const char* fn, int l, size_t s ) { address = a; line = l; size = s; strcpy_s( file, fn ); };
+	ALLOC( void* a, const char* fn, int l, size_t s ) { address = a; line = l; size = s; id = g_allocId++; strcpy_s( file, fn ); };
 	ALLOC( void ) {};
 };
 
@@ -1243,14 +1250,15 @@ unsigned int g_allocCount = 0;
 
 
 void CreateStaticObject( void );
+void PrintAllocation( const char* tagText, ALLOC& a );
 
 //********************************************************************************************************************************
 // Overrides for new operator (x4)
 //********************************************************************************************************************************
 
 // The file and line are passed through using the macro defined in PlayMemory.h which redefines new. This will only happen if 
-// PlayMemory.h has been parsed in advace of the use of new in the relevant code. This approach is problematic for classes 
-// the safest appproach. The two definitions of new without the file and line pick up any other memory allocations for completeness.
+// PlayMemory.h has been parsed in advance of the use of new in the relevant code. This approach is problematic for classes 
+// the safest approach. The two definitions of new without the file and line pick up any other memory allocations for completeness.
 void* operator new( size_t size, const char* file, int line )
 {
 	PLAY_ASSERT( g_allocCount < MAX_ALLOCATIONS );
@@ -1370,30 +1378,35 @@ void CreateStaticObject( void )
 	static DestroyedLast last;
 }
 
+void PrintAllocation( const char* tagText, ALLOC& a )
+{
+	char buffer[MAX_FILENAME * 2] = { 0 };
+
+	if( a.address != nullptr )
+	{
+		char* lastSlash = strrchr( a.file, '\\' );
+		if( lastSlash )
+		{
+			strcpy_s( buffer, lastSlash + 1 );
+			strcpy_s( a.file, buffer );
+		}
+		// Format in such a way that VS can double click to jump to the allocation.
+		sprintf_s( buffer, "%s %s(%d): 0x%02X %d bytes [%d]\n", tagText, a.file, a.line, static_cast<int>( reinterpret_cast<long long>( a.address ) ), static_cast<int>( a.size ), a.id );
+		DebugOutput( buffer );
+	}
+}
+
 void PrintAllocations( const char* tagText )
 {
 	int bytes = 0;
 	char buffer[MAX_FILENAME * 2] = { 0 };
-	DebugOutput( "**************************************************\n" );
+	DebugOutput( "****************************************************\n" );
 	DebugOutput( "MEMORY ALLOCATED\n" );
-	DebugOutput( "**************************************************\n" );
+	DebugOutput( "****************************************************\n" );
 	for( unsigned int n = 0; n < g_allocCount; n++ )
 	{
 		ALLOC& a = g_allocations[n];
-
-		if( a.address != nullptr )
-		{
-			char* lastSlash = strrchr( a.file, '\\' );
-			if( lastSlash )
-			{
-				strcpy_s( buffer, lastSlash + 1 );
-				strcpy_s( a.file, buffer );
-			}
-			// Format in such a way that VS can double click to jump to the allocation.
-			sprintf_s( buffer, "%s %s(%d): 0x%02X %d bytes\n", tagText, a.file, a.line, static_cast<int>( reinterpret_cast<long long>( a.address ) ), static_cast<int>( a.size ) );
-			DebugOutput( buffer );
-			bytes += static_cast<int>( a.size );
-		}
+		PrintAllocation( tagText, a );
 	}
 	sprintf_s( buffer, "%s Total = %d bytes\n", tagText, bytes );
 	DebugOutput( buffer );
@@ -1401,7 +1414,9 @@ void PrintAllocations( const char* tagText )
 
 }
 
+#pragma pop_macro("new")
 
+#endif
 
 //********************************************************************************************************************************
 // File:		PlayWindow.cpp
@@ -3258,7 +3273,6 @@ void PlayInput::Destroy()
 {
 	if( s_pInstance )
 		delete s_pInstance;
-	s_pInstance = nullptr;
 }
 
 //********************************************************************************************************************************
@@ -3836,7 +3850,7 @@ namespace Play
 	void DestroyGameObjectsByType( int objType )
 	{
 		std::vector<int> typeVec = CollectGameObjectIDsByType( objType );
-		for( int i = 1; i < typeVec.size(); i++ )
+		for( size_t i = 1; i < typeVec.size(); i++ )
 			DestroyGameObject( typeVec[i] );
 	}
 
