@@ -75,6 +75,7 @@
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)Build\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)Build\Intermediate\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <PreBuildEventUseInBuild>false</PreBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -86,6 +87,7 @@
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)Build\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)Build\Intermediate\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <PreBuildEventUseInBuild>false</PreBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -111,6 +113,10 @@
       <AdditionalLibraryDirectories>$(SolutionDir)Build\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -159,6 +165,10 @@
       <AdditionalLibraryDirectories>$(SolutionDir)Build\$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -196,7 +206,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Play.h" />
+    <ClInclude Include="..\Play.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
