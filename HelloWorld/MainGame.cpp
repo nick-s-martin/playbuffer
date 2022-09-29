@@ -1,10 +1,12 @@
 #define PLAY_IMPLEMENTATION
 #define PLAY_USING_GAMEOBJECT_MANAGER
 #include "Play.h"
+#include <iostream>
+using namespace std;
 
 int DISPLAY_WIDTH = 1280;
 int DISPLAY_HEIGHT = 720;
-int DISPLAY_SCALE = 1;
+int DISPLAY_SCALE = 2;
 
 enum Agent8State
 {
@@ -17,6 +19,8 @@ enum Agent8State
 struct GameState
 {
 	int score = 0;
+	int highscore;
+	bool muted;
 	Agent8State agentState = STATE_APPEAR;
 };
 
@@ -41,6 +45,8 @@ void UpdateCoinsAndStars();
 void UpdateLasers();
 void UpdateDestroyed();
 void UpdateAgent8();
+void GetHighscore();
+void ToggleMusic();
 
 // The entry point for a PlayBuffer program
 void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
@@ -53,6 +59,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	int id_fan = Play::CreateGameObject(TYPE_FAN, { 1140, 217 }, 0, "fan");
 	Play::GetGameObject(id_fan).velocity = { 0, 3 };
 	Play::GetGameObject(id_fan).animSpeed = 1.0f;
+	GetHighscore();
 }
 
 // Called by PlayBuffer every frame (60 times a second!)
@@ -65,10 +72,15 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateCoinsAndStars();
 	UpdateLasers();
 	UpdateDestroyed();
-	Play::DrawFontText("64px", "ARROW KEYS TO MOVE UP AND DOWN AND SPACE TO FIRE",
+	ToggleMusic();
+	Play::DrawFontText("64px", "ARROW KEYS TO MOVE UP/DOWN/ROTATE AND SPACE TO FIRE",
 		{ DISPLAY_WIDTH / 2, DISPLAY_HEIGHT - 30 }, Play::CENTRE);
+	Play::DrawFontText("64px", "M TO TOGGLE" + std::to_string(gameState.muted),
+		{ DISPLAY_WIDTH / 2, DISPLAY_HEIGHT - 75 }, Play::CENTRE);
 	Play::DrawFontText("132px", "SCORE: " + std::to_string(gameState.score),
 		{ DISPLAY_WIDTH / 2, 50 }, Play::CENTRE);
+	Play::DrawFontText("64px", "HIGHSCORE: " + std::to_string(gameState.highscore),
+		{ DISPLAY_WIDTH / 2, 120 }, Play::CENTRE);
 	Play::PresentDrawingBuffer();
 	return Play::KeyDown( VK_ESCAPE );
 }
@@ -108,40 +120,70 @@ void HandlePlayerControls()
 			obj_agent8.acceleration = { 0, 0 };
 		}
 	}
+	if (Play::KeyDown(VK_RIGHT))
+	{
+		obj_agent8.rotation += 0.1f;
+	}
+	else if (Play::KeyDown(VK_LEFT))
+	{
+		obj_agent8.rotation -= 0.1f;
+	}
 	if (Play::KeyPressed(VK_SPACE))
 	{
-		Vector2D firePos = obj_agent8.pos + Vector2D(155, -75);
+		Vector2D firePos = obj_agent8.pos + Vector2D(155 * cos(obj_agent8.rotation) + 75 * sin(obj_agent8.rotation), 155 * sin(obj_agent8.rotation) - 75 * cos(obj_agent8.rotation));
 		int id = Play::CreateGameObject(TYPE_LASER, firePos, 30, "laser");
-		Play::GetGameObject(id).velocity = { 32, 0 };
+		Play::GetGameObject(id).rotation = obj_agent8.rotation;
+		Play::GetGameObject(id).velocity = { cos(obj_agent8.rotation)*32, sin(obj_agent8.rotation) * 32 };
 		Play::PlayAudio("shoot");
+	}
+}
+
+void ToggleMusic()
+{
+	if (Play::KeyPressed(VK_BACK))
+	{
+		gameState.muted = !gameState.muted;
+		if (gameState.muted == true)
+		{
+			Play::StopAudioLoop("music");
+		}
+		else if (gameState.agentState != STATE_DEAD)
+		{
+			Play::StartAudioLoop("music");
+		}
 	}
 }
 
 void UpdateFan()
 {
 	GameObject& obj_fan = Play::GetGameObjectByType(TYPE_FAN);
-	if (Play::RandomRoll(50) == 50)
-	{
-		int id = Play::CreateGameObject(TYPE_TOOL, obj_fan.pos, 50, "driver");
-		GameObject& obj_tool = Play::GetGameObject(id);
-		obj_tool.velocity = Point2f(-8, Play::RandomRollRange(-1, 1) * 6);
 
-		if (Play::RandomRoll(2) == 1)
-		{
-			Play::SetSprite(obj_tool, "spanner", 0);
-			obj_tool.radius = 100;
-			obj_tool.velocity.x = -4;
-			obj_tool.rotSpeed = 0.1f;
-		}
-		Play::PlayAudio("tool");
-	}
-	if (Play::RandomRoll(150) == 1)
+	if (gameState.agentState != STATE_DEAD)
 	{
-		int id = Play::CreateGameObject(TYPE_COIN, obj_fan.pos, 40, "coin");
-		GameObject& obj_coin = Play::GetGameObject(id);
-		obj_coin.velocity = { -3, 0 };
-		obj_coin.rotSpeed = 0.1f;
+		if (Play::RandomRoll(50) == 50)
+		{
+			int id = Play::CreateGameObject(TYPE_TOOL, obj_fan.pos, 50, "driver");
+			GameObject& obj_tool = Play::GetGameObject(id);
+			obj_tool.velocity = Point2f(-8, Play::RandomRollRange(-1, 1) * 6);
+
+			if (Play::RandomRoll(2) == 1)
+			{
+				Play::SetSprite(obj_tool, "spanner", 0);
+				obj_tool.radius = 100;
+				obj_tool.velocity.x = -4;
+				obj_tool.rotSpeed = 0.1f;
+			}
+			Play::PlayAudio("tool");
+		}
+		if (Play::RandomRoll(150) == 1)
+		{
+			int id = Play::CreateGameObject(TYPE_COIN, obj_fan.pos, 40, "coin");
+			GameObject& obj_coin = Play::GetGameObject(id);
+			obj_coin.velocity = { -3, 0 };
+			obj_coin.rotSpeed = 0.1f;
+		}
 	}
+	
 	Play::UpdateGameObject(obj_fan);
 
 	if (Play::IsLeavingDisplayArea(obj_fan))
@@ -264,11 +306,21 @@ void UpdateLasers()
 			gameState.score = 0;
 
 		Play::UpdateGameObject(obj_laser);
-		Play::DrawObject(obj_laser);
+		Play::DrawObjectRotated(obj_laser);
 
 		if (!Play::IsVisible(obj_laser) || hasCollided)
 			Play::DestroyGameObject(id_laser);
 	}
+}
+
+void GetHighscore()
+{
+	std::ifstream file("highscore.txt");
+		if (file.is_open())
+		{
+			file >> gameState.highscore;
+			file.close();
+		}
 }
 
 void UpdateDestroyed()
@@ -317,6 +369,14 @@ void UpdateAgent8()
 	case STATE_DEAD:
 		obj_agent8.acceleration = { -0.3f , 0.5f };
 		obj_agent8.rotation += 0.25f;
+		if (gameState.score > gameState.highscore)
+		{
+			gameState.highscore = gameState.score;
+			std::ofstream file;
+			file.open("highscore.txt");
+			file << gameState.highscore;
+			file.close();
+		}
 		if (Play::KeyPressed(VK_SPACE) == true)
 		{
 			gameState.agentState = STATE_APPEAR;
